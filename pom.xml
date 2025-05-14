@@ -14,7 +14,7 @@
 	<name>association-assignment</name>
 	<description>Association Volunteer Assignment System</description>
 	<properties>
-		<java.version>21</java.version> <!-- Or 17 -->
+		<java.version>17</java.version> <!-- Or 17 -->
 	</properties>
 	<dependencies>
 		<dependency>
