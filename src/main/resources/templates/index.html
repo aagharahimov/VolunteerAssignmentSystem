@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Volunteer Assignment System</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- SockJS and STOMP client libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+<h1>Volunteer Assignment System</h1>
+
+<div class="container">
+    <div class="preferences-section">
+        <h2>My Preferences</h2>
+        <label for="volunteerId">Volunteer ID:</label>
+        <input type="text" id="volunteerId" value="volunteer1"> <!-- Default for testing -->
+        <button onclick="fetchInitialData()">Load My Data / Services</button>
+
+        <div id="services-list">
+            <h3>Available Services (Drag to 'My Choices' below)</h3>
+            <!-- Services will be populated here by JS -->
+        </div>
+
+        <div id="my-choices-container">
+            <h3>My Choices (Ranked, Max 5)</h3>
+            <ul id="my-choices-list" class="droppable">
+                <!-- Chosen services will appear here -->
+            </ul>
+        </div>
+        <button onclick="submitPreferences()">Submit Preferences</button>
+        <p id="pref-status"></p>
+    </div>
+
+    <div class="assignment-section">
+        <h2>Assignments</h2>
+        <button onclick="triggerOptimization()">Run Optimization</button>
+        <p id="opt-status"></p>
+        <div id="assignment-results">
+            <!-- Results will be populated here by WebSocket -->
+            <table>
+                <thead>
+                <tr>
+                    <th>Volunteer ID</th>
+                    <th>Assigned Service</th>
+                    <th>Cost</th>
+                    <th>Preference Rank</th>
+                </tr>
+                </thead>
+                <tbody id="assignment-table-body">
+                </tbody>
+            </table>
+            <p><strong>Total Cost:</strong> <span id="total-cost">N/A</span></p>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
