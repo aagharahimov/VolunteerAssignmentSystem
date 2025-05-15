@@ -7,6 +7,8 @@
     <!-- SockJS and STOMP client libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <!-- SortableJS Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
 </head>
 <body>
 <h1>Volunteer Assignment System</h1>
@@ -18,14 +20,16 @@
         <input type="text" id="volunteerId" value="volunteer1"> <!-- Default for testing -->
         <button onclick="fetchInitialData()">Load My Data / Services</button>
 
-        <div id="services-list">
-            <h3>Available Services (Drag to 'My Choices' below)</h3>
-            <!-- Services will be populated here by JS -->
+        <div class="list-container">
+            <h3>Available Services</h3>
+            <ul id="available-services-list" class="sortable-list">
+                <!-- Services will be populated here by JS -->
+            </ul>
         </div>
 
-        <div id="my-choices-container">
-            <h3>My Choices (Ranked, Max 5)</h3>
-            <ul id="my-choices-list" class="droppable">
+        <div class="list-container">
+            <h3>My Choices (Ranked, Max 5 - Drag to reorder)</h3>
+            <ul id="my-choices-list" class="sortable-list choices-list">
                 <!-- Chosen services will appear here -->
             </ul>
         </div>
@@ -38,7 +42,6 @@
         <button onclick="triggerOptimization()">Run Optimization</button>
         <p id="opt-status"></p>
         <div id="assignment-results">
-            <!-- Results will be populated here by WebSocket -->
             <table>
                 <thead>
                 <tr>

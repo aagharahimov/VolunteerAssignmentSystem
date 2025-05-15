@@ -1,28 +1,115 @@
 let stompClient = null;
-let availableServices = [];
-let myChoicesList = []; // Array of service IDs
+let availableServicesData = []; // Store the full service data (id, name, capacity)
+let myChoicesSortableInstance = null;
+let availableServicesSortableInstance = null;
 
-document.addEventListener('DOMContentLoaded', (event) => {
+document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
-    // Make lists sortable/draggable (basic example, consider a library like SortableJS)
-    makeServicesDraggable();
-    makeChoicesDroppableAndSortable();
+    initializeSortableLists();
+    // Optionally, load initial data if a volunteer ID is pre-filled
+    // if (document.getElementById('volunteerId').value) {
+    //     fetchInitialData();
+    // }
 });
 
 function connectWebSocket() {
-    const socket = new SockJS('/ws-assign');
+    const socket = new SockJS('/ws-assign'); // Ensure this path is correct for your Spring Boot SockJS endpoint
     stompClient = Stomp.over(socket);
-    stompClient.connect({}, function (frame) {
+    stompClient.connect({}, (frame) => {
         console.log('Connected to WebSocket: ' + frame);
-        stompClient.subscribe('/topic/assignments', function (message) {
+        stompClient.subscribe('/topic/assignments', (message) => {
             showAssignmentResults(JSON.parse(message.body));
         });
-    }, function(error) {
+        // If using STOMP, send CONNECT frame here if not handled by library automatically
+        // This depends on your specific STOMP client and server setup.
+        // The Tyrus client from JavaFX example needed manual STOMP frames.
+        // Stomp.js usually handles this.
+    }, (error) => {
         console.error('STOMP error: ' + error);
-        // You might want to implement reconnection logic here
-        setTimeout(connectWebSocket, 5000); // Try to reconnect after 5 seconds
+        setTimeout(connectWebSocket, 5000); // Try to reconnect
     });
 }
+
+function initializeSortableLists() {
+    const availableListEl = document.getElementById('available-services-list');
+    const choicesListEl = document.getElementById('my-choices-list');
+
+    availableServicesSortableInstance = new Sortable(availableListEl, {
+        group: {
+            name: 'servicesGroup',
+            pull: 'clone', // Clone items from available to choices
+            put: false     // Don't allow dropping items back into available (or handle it if you want)
+        },
+        sort: false, // Don't allow sorting within the available services list
+        animation: 150,
+        onEnd: function (/**Event*/evt) {
+            // If an item was cloned and moved to the choices list, it might appear there.
+            // We'll handle adding to choices in the 'onAdd' of the choicesListEl.
+            // This ensures the original in available-services-list is not removed.
+            if (evt.to === choicesListEl && evt.from === availableListEl) {
+                // The cloned item will be handled by choicesListEl's onAdd
+            }
+        }
+    });
+
+    myChoicesSortableInstance = new Sortable(choicesListEl, {
+        group: 'servicesGroup', // Same group name to allow moving between them
+        animation: 150,
+        filter: '.remove-btn', // Clicks on .remove-btn won't start a drag
+        onAdd: function (/**Event*/evt) {
+            const itemEl = evt.item; // The dragged DOM Element
+            const serviceId = itemEl.dataset.serviceId;
+
+            if (choicesListEl.children.length > 5) {
+                alert('You can select a maximum of 5 services.');
+                itemEl.remove(); // Remove the item if it exceeds the limit
+                // If cloned, we might need to remove from source if not handled by 'clone'
+                // But since we're cloning, we don't want to remove from source.
+            } else {
+                // Check for duplicates (SortableJS might add it even if it's a duplicate by ID)
+                let count = 0;
+                for (let i = 0; i < choicesListEl.children.length; i++) {
+                    if (choicesListEl.children[i].dataset.serviceId === serviceId) {
+                        count++;
+                    }
+                }
+                if (count > 1) { // If this add resulted in a duplicate
+                    itemEl.remove(); // Remove the duplicate
+                    alert("This service is already in your choices.");
+                } else {
+                    // Add remove button to the newly added item in choices
+                    addRemoveButtonToChoiceItem(itemEl);
+                    updateMyChoicesListOrder(); // Update internal array if needed
+                }
+            }
+        },
+        onUpdate: function (/**Event*/evt) {
+            // Called when sorting within the same list
+            updateMyChoicesListOrder();
+        },
+        onRemove: function(/**Event*/evt) {
+            // Called when an item is removed from this list (e.g., dragged to another list)
+            // If you drag out of choices list, it should be removed.
+            updateMyChoicesListOrder();
+        }
+    });
+}
+
+function addRemoveButtonToChoiceItem(itemEl) {
+    // Remove existing button if any (e.g. if item moved back and forth)
+    const existingBtn = itemEl.querySelector('.remove-btn');
+    if (existingBtn) existingBtn.remove();
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'X';
+    removeBtn.classList.add('remove-btn');
+    removeBtn.onclick = () => {
+        itemEl.remove(); // Remove the <li> element from the DOM
+        updateMyChoicesListOrder(); // Update the underlying data
+    };
+    itemEl.appendChild(removeBtn);
+}
+
 
 function fetchInitialData() {
     const volunteerId = document.getElementById('volunteerId').value;
@@ -30,121 +117,59 @@ function fetchInitialData() {
         alert('Please enter a Volunteer ID.');
         return;
     }
+    document.getElementById('pref-status').textContent = 'Loading...';
+
     fetch(`/api/preferences/initial-data?volunteerId=${volunteerId}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        })
         .then(data => {
-            availableServices = data.services || [];
+            availableServicesData = data.services || [];
             const volunteerPrefs = data.volunteer?.preferredServicesRanks || {};
 
-            const servicesListDiv = document.getElementById('services-list');
-            servicesListDiv.innerHTML = '<h3>Available Services (Drag to \'My Choices\' below)</h3><ul></ul>'; // Clear previous
-            const ul = servicesListDiv.querySelector('ul');
-            availableServices.forEach(service => {
+            const availableListEl = document.getElementById('available-services-list');
+            availableListEl.innerHTML = ''; // Clear previous
+            availableServicesData.forEach(service => {
                 const li = document.createElement('li');
-                li.textContent = `${service.name} (Capacity: ${service.maxVolunteers})`;
-                li.dataset.serviceId = service.id;
-                li.draggable = true;
-                li.id = `service-item-${service.id}`;
-                ul.appendChild(li);
+                li.textContent = `${service.name} (Cap: ${service.maxVolunteers})`;
+                li.dataset.serviceId = service.id; // Crucial for SortableJS
+                availableListEl.appendChild(li);
             });
 
-            // Populate my choices if they exist
-            myChoicesList = [];
-            const choicesUl = document.getElementById('my-choices-list');
-            choicesUl.innerHTML = ''; // Clear previous
+            const choicesListEl = document.getElementById('my-choices-list');
+            choicesListEl.innerHTML = ''; // Clear previous
 
-            // Sort preferences by rank
-            const sortedPrefs = Object.entries(volunteerPrefs)
-                .sort(([,aRank],[ ,bRank]) => aRank - bRank) // Sort by rank (value in map)
-                .map(([rank, serviceId]) => ({ rank: parseInt(rank), serviceId: serviceId }));
+            // Sort preferences by rank (key of the map) and populate choices
+            const sortedPrefEntries = Object.entries(volunteerPrefs)
+                .sort((a, b) => parseInt(a[0]) - parseInt(b[0])); // Sort by rank (key)
 
-
-            // Correctly extract ranked service IDs from the volunteer's data
-            const rankedServiceIds = [];
-            if (data.volunteer && data.volunteer.preferredServicesRanks) {
-                const prefEntries = Object.entries(data.volunteer.preferredServicesRanks);
-                prefEntries.sort((a, b) => a[0] - b[0]); // Sort by rank (key)
-                prefEntries.forEach(([rank, serviceId]) => rankedServiceIds.push(serviceId));
-            }
-
-
-            myChoicesList = [...rankedServiceIds]; // Update myChoicesList
-            updateMyChoicesDisplay();
-
-            makeServicesDraggable(); // Re-apply draggable to new items
+            sortedPrefEntries.forEach(([rank, serviceId]) => {
+                const service = availableServicesData.find(s => s.id === serviceId);
+                if (service) {
+                    const li = document.createElement('li');
+                    li.textContent = service.name; // Display only name for simplicity in choices
+                    li.dataset.serviceId = service.id;
+                    addRemoveButtonToChoiceItem(li); // Add remove button
+                    choicesListEl.appendChild(li);
+                }
+            });
+            document.getElementById('pref-status').textContent = 'Data loaded.';
         })
-        .catch(error => console.error('Error fetching initial data:', error));
+        .catch(error => {
+            console.error('Error fetching initial data:', error);
+            document.getElementById('pref-status').textContent = `Error: ${error.message}`;
+        });
 }
 
-
-function makeServicesDraggable() {
-    document.querySelectorAll('#services-list li').forEach(item => {
-        item.addEventListener('dragstart', handleDragStart);
-    });
-}
-
-function makeChoicesDroppableAndSortable() {
-    const choicesUl = document.getElementById('my-choices-list');
-    choicesUl.addEventListener('dragover', handleDragOver);
-    choicesUl.addEventListener('drop', handleDropOnChoices);
-
-    // For re-ordering within choices (simplified)
-    choicesUl.addEventListener('dragstart', (event) => {
-        if (event.target.tagName === 'LI') {
-            event.dataTransfer.setData('text/plain', event.target.dataset.serviceId);
-            event.dataTransfer.effectAllowed = 'move';
-        }
-    });
-}
-
-function handleDragStart(event) {
-    event.dataTransfer.setData('text/plain', event.target.dataset.serviceId);
-    event.dataTransfer.effectAllowed = 'copy';
-}
-
-function handleDragOver(event) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-}
-
-function handleDropOnChoices(event) {
-    event.preventDefault();
-    const serviceId = event.dataTransfer.getData('text/plain');
-    const serviceName = availableServices.find(s => s.id === serviceId)?.name;
-
-    if (serviceId && serviceName && !myChoicesList.includes(serviceId) && myChoicesList.length < 5) {
-        myChoicesList.push(serviceId);
-        updateMyChoicesDisplay();
-    } else if (myChoicesList.length >= 5) {
-        alert('You can select a maximum of 5 services.');
-    }
-}
-
-function updateMyChoicesDisplay() {
-    const choicesUl = document.getElementById('my-choices-list');
-    choicesUl.innerHTML = ''; // Clear and redraw
-    myChoicesList.forEach((serviceId, index) => {
-        const service = availableServices.find(s => s.id === serviceId);
-        if (service) {
-            const li = document.createElement('li');
-            li.textContent = `${index + 1}. ${service.name}`;
-            li.dataset.serviceId = serviceId;
-            li.draggable = true; // For re-ordering
-            // Add a remove button
-            const removeBtn = document.createElement('button');
-            removeBtn.textContent = 'X';
-            removeBtn.style.marginLeft = '10px';
-            removeBtn.onclick = () => removeChoice(serviceId);
-            li.appendChild(removeBtn);
-            choicesUl.appendChild(li);
-        }
-    });
-    makeChoicesDroppableAndSortable(); // Re-apply draggable for items in choices list
-}
-
-function removeChoice(serviceIdToRemove) {
-    myChoicesList = myChoicesList.filter(id => id !== serviceIdToRemove);
-    updateMyChoicesDisplay();
+// This function is less critical if SortableJS directly manipulates the DOM elements
+// that we read during submission. However, it can be useful for validation or other logic.
+function updateMyChoicesListOrder() {
+    const choicesListEl = document.getElementById('my-choices-list');
+    const currentChoiceIds = Array.from(choicesListEl.children).map(li => li.dataset.serviceId);
+    console.log("Current ranked choices:", currentChoiceIds);
+    // You could store this `currentChoiceIds` in a global variable if needed elsewhere,
+    // but for submission, we'll read directly from the DOM.
 }
 
 
@@ -154,14 +179,23 @@ function submitPreferences() {
         alert('Please enter a Volunteer ID.');
         return;
     }
-    if (myChoicesList.length === 0) {
-        alert('Please select at least one service preference.');
+
+    const choicesListEl = document.getElementById('my-choices-list');
+    const rankedServiceIds = Array.from(choicesListEl.children).map(li => li.dataset.serviceId);
+
+    if (rankedServiceIds.length === 0) {
+        // alert('Please select at least one service preference.');
+        // return; // Allow submitting empty if desired, backend can validate
+    }
+    if (rankedServiceIds.length > 5) {
+        alert('You have selected more than 5 services. Please remove some.');
         return;
     }
 
+
     const preferenceData = {
-        volunteerId: volunteerId,
-        rankedServiceIds: myChoicesList
+        // volunteerId: volunteerId, // Backend gets it from path variable
+        rankedServiceIds: rankedServiceIds
     };
 
     document.getElementById('pref-status').textContent = 'Submitting...';
@@ -175,7 +209,7 @@ function submitPreferences() {
             return response.text().then(text => { throw new Error(text || 'Submission failed') });
         })
         .then(data => {
-            document.getElementById('pref-status').textContent = 'Preferences submitted: ' + data;
+            document.getElementById('pref-status').textContent = 'Preferences submitted successfully!';
             console.log('Preferences submitted:', data);
         })
         .catch(error => {
@@ -211,8 +245,8 @@ function showAssignmentResults(result) {
         result.assignments.forEach(assignment => {
             const row = resultsTableBody.insertRow();
             row.insertCell().textContent = assignment.volunteerId;
-            const serviceName = availableServices.find(s => s.id === assignment.serviceId)?.name || assignment.serviceId;
-            row.insertCell().textContent = serviceName;
+            const service = availableServicesData.find(s => s.id === assignment.serviceId);
+            row.insertCell().textContent = service ? service.name : assignment.serviceId;
             row.insertCell().textContent = assignment.cost.toFixed(2);
             row.insertCell().textContent = assignment.preferenceRank === 0 ? 'Not Preferred' : assignment.preferenceRank;
         });
@@ -222,6 +256,6 @@ function showAssignmentResults(result) {
         const row = resultsTableBody.insertRow();
         const cell = row.insertCell();
         cell.colSpan = 4;
-        cell.textContent = result.message || "No assignments available.";
+        cell.textContent = result.message || "No assignments available or error occurred.";
     }
 }
