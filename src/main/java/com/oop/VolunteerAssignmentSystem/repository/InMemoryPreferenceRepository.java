@@ -84,7 +84,6 @@ public class InMemoryPreferenceRepository {
         volunteer.setId(volunteerId);
         // If the name is not set from client or known, use volunteerId or a default
         if (volunteer.getName() == null || volunteer.getName().startsWith("Dummy Volunteer")) {
-            // You might want a way for the client to send the volunteer's name too
             volunteer.setName("Volunteer " + volunteerId); // Or just use the ID as name
         }
         volunteer.setPreferredServicesRanks(newRankedPreferences); // Set the NEW preferences
@@ -99,7 +98,7 @@ public class InMemoryPreferenceRepository {
 
     /**
      * Returns all volunteers and their currently stored preferences.
-     * This will include a mix of dummy data (if not overwritten) and real user-submitted data.
+     * This will include a mix of dummy data     and real user-submitted data.
      */
     public Map<String, Volunteer> findAllVolunteersWithPreferences() {
         // Return a copy to prevent external modification if necessary,

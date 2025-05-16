@@ -6,14 +6,10 @@ let availableServicesSortableInstance = null;
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     initializeSortableLists();
-    // Optionally, load initial data if a volunteer ID is pre-filled
-    // if (document.getElementById('volunteerId').value) {
-    //     fetchInitialData();
-    // }
 });
 
 function connectWebSocket() {
-    const socket = new SockJS('/ws-assign'); // Ensure this path is correct for your Spring Boot SockJS endpoint
+    const socket = new SockJS('/ws-assign');
     stompClient = Stomp.over(socket);
     stompClient.connect({}, (frame) => {
         console.log('Connected to WebSocket: ' + frame);
